@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
+import '../services/data_collection_service.dart';
 
 class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
@@ -52,18 +50,10 @@ class _AboutScreenState extends State<AboutScreen> {
   }
 
   Future<void> _loadLibraryVersion() async {
-    final libraryPath = Settings.getValue<String>('key-library-path');
-    if (libraryPath == null) {
-      libraryVersion = 'לא נמצא נתיב ספרייה';
-      return;
-    }
-    final versionFile =
-        File(p.join(libraryPath, 'אודות התוכנה', 'גירסת ספריה.txt'));
-    if (await versionFile.exists()) {
-      libraryVersion = await versionFile.readAsString();
-      libraryVersion = libraryVersion?.trim();
-    } else {
-      libraryVersion = 'קובץ לא נמצא בנתיב: ${versionFile.path}';
+    final dataService = DataCollectionService();
+    libraryVersion = await dataService.readLibraryVersion();
+    if (libraryVersion == 'unknown') {
+      libraryVersion = 'לא ידוע';
     }
   }
 
@@ -124,40 +114,77 @@ class _AboutScreenState extends State<AboutScreen> {
               const SizedBox(height: 16),
               const Divider(color: Colors.grey),
               const SizedBox(height: 16),
-              Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 16.0),
-                child: RichText(
-                  textDirection: TextDirection.rtl,
-                  text: const TextSpan(
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.black,
+              Column(
+                children: [
+                  // Title aligned to the right
+                  Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 16.0),
+                    child: const Text(
+                      'סכום משמעותי לפיתוח התוכנה, נתרם לעילוי נשמת:',
+                      style: TextStyle(fontSize: 16),
+                      textDirection: TextDirection.rtl,
                     ),
-                    children: [
-                      TextSpan(
-                          text:
-                              'סכום משמעותי לפיתוח התוכנה, נתרם לעילוי נשמת:\n\n'),
-                      TextSpan(
-                        text: 'ר\' ',
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      TextSpan(
-                        text: 'משה',
-                        style: TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
-                      TextSpan(text: ' בן '),
-                      TextSpan(
-                        text: 'יהודה',
-                        style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      TextSpan(text: ' ז"ל'),
-                    ],
                   ),
-                ),
+                  const SizedBox(height: 16),
+
+                  // Scrollable and Centered Name
+                  SizedBox(
+                    height: 100, // Max height for the scrollable area
+                    child: SingleChildScrollView(
+                      child: Center(
+                        // Center the RichText
+                        child: RichText(
+                          textAlign: TextAlign.center,
+                          textDirection: TextDirection.rtl,
+                          text: const TextSpan(
+                            style: TextStyle(
+                              fontSize: 24, // Default size
+                              color: Colors.black,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: 'ר\' ',
+                                style: TextStyle(
+                                  fontSize: 20, // Smaller
+                                  fontWeight: FontWeight.normal,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'משה',
+                                style: TextStyle(
+                                  fontSize: 32, // Clearly larger
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' בן ',
+                                style: TextStyle(
+                                  fontSize: 20, // Smaller
+                                  fontWeight: FontWeight.normal,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'יהודה',
+                                style: TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' ז"ל',
+                                style: TextStyle(
+                                  fontSize: 20, // Smaller
+                                  fontWeight: FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
