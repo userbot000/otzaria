@@ -208,15 +208,24 @@ class _TocViewerState extends State<TocViewer>
                         state.selectedIndex == entry.index) ||
                     autoIndex == entry.index);
             return Material(
-              color: Colors.transparent,
-              child: ListTile(
-                title: Text(entry.text),
-                selected: selected,
-                selectedColor:
-                    Theme.of(context).colorScheme.onSecondaryContainer,
-                selectedTileColor:
-                    Theme.of(context).colorScheme.secondaryContainer,
+              color: selected 
+                  ? Theme.of(context).colorScheme.secondaryContainer
+                  : Colors.transparent,
+              child: InkWell(
                 onTap: navigateToEntry,
+                hoverColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    entry.text,
+                    style: TextStyle(
+                      color: selected
+                          ? Theme.of(context).colorScheme.onSecondaryContainer
+                          : null,
+                    ),
+                  ),
+                ),
               ),
             );
           },
@@ -240,6 +249,9 @@ if (controller.isExpanded != isExpanded) {
         child: Theme(
           data: Theme.of(context).copyWith(
             dividerColor: Colors.transparent,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            hoverColor: Colors.transparent,
           ),
           child: ExpansionTile(
             controller: controller,
@@ -262,17 +274,24 @@ if (controller.isExpanded != isExpanded) {
                             state.selectedIndex == entry.index) ||
                         autoIndex == entry.index);
                 return Material(
-                  color: Colors.transparent,
-                  child: ListTile(
-                    title: Text(showFullText ? entry.fullText : entry.text),
-                    selected: selected,
-                    selectedColor: Theme.of(context).colorScheme.onSecondary,
-                    selectedTileColor: Theme.of(context)
-                        .colorScheme
-                        .secondary
-                        .withValues(alpha: 0.2),
+                  color: selected 
+                      ? Theme.of(context).colorScheme.secondaryContainer
+                      : Colors.transparent,
+                  child: InkWell(
                     onTap: navigateToEntry,
-                    contentPadding: EdgeInsets.zero,
+                    hoverColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        showFullText ? entry.fullText : entry.text,
+                        style: TextStyle(
+                          color: selected
+                              ? Theme.of(context).colorScheme.onSecondaryContainer
+                              : null,
+                        ),
+                      ),
+                    ),
                   ),
                 );
               },
