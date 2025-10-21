@@ -8,10 +8,6 @@ on:
     branches:
       - main
       - dev
-      - dev_dev2
-      - n-search2
-      - ns2new
-      - n-search2.1
 
   pull_request:
     types: [opened, synchronize, reopened]
@@ -19,12 +15,15 @@ on:
 
   # טריגר לפרסום בלבד
   release:
-    types: [published]
+    types: [published, prereleased]
 
 jobs:
   build_windows:
     if: github.event_name != 'release'
     runs-on: windows-2022
+    # env:
+    #   RUSTUP_HOME: ${{ github.workspace }}\.rustup
+    #   CARGO_HOME:  ${{ github.workspace }}\.cargo
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
@@ -34,6 +33,27 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      # - name: Install Rust (stable)
+      #   uses: dtolnay/rust-toolchain@stable
+
+      # - name: Cache cargo registry and git
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       ${{ env.CARGO_HOME }}\registry
+      #       ${{ env.CARGO_HOME }}\git
+      #     key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-cargo-
+
+      # - name: Add cargo to PATH & verify toolchain
+      #   shell: pwsh
+      #   run: |
+      #     "$env:CARGO_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+      #     rustc -Vv
+      #     cargo -V
+      #     rustup show
 
       - name: Install Inno Setup (project script + fallback)
         shell: pwsh
@@ -59,10 +79,11 @@ jobs:
           if (-not $iscc) { throw "ISCC.exe not found after installation" }
           "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "ISCC resolved to: $iscc"
-      
+
       - name: Build Flutter Windows app
         shell: pwsh
         run: |
+          # flutter pub get
           flutter build windows --release
 
       - name: Zip Windows build
@@ -92,6 +113,8 @@ jobs:
           Get-ChildItem -Path "otzaria-library" -Recurse | Select-Object -First 10
 
       - name: Build Inno Setup installer
+        continue-on-error: true
+        id: build_installer
         shell: pwsh
         run: |
           if ("${{ github.ref }}" -eq "refs/heads/main") {
@@ -103,6 +126,7 @@ jobs:
           }
 
       - name: Upload Windows installer
+        if: steps.build_installer.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: otzaria-windows-installer
@@ -123,6 +147,9 @@ jobs:
   build_linux:
     if: github.event_name != 'release'
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/.rustup
+      CARGO_HOME:  ${{ github.workspace }}/.cargo
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
@@ -132,18 +159,58 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Install Rust (stable) with rustup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add cargo to PATH and verify toolchain
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          rustc -Vv
+          cargo -V
+          rustup show
+
+      - name: Cache cargo registry and git
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CARGO_HOME }}/registry
+            ${{ env.CARGO_HOME }}/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build libgtk-3-dev libblkid1 liblzma5 clang cmake git pkg-config liblzma-dev libstdc++-12-dev rpm patchelf
+          sudo apt-get install -y \
+            build-essential ninja-build libgtk-3-dev libblkid1 liblzma5 \
+            clang cmake git pkg-config liblzma-dev rpm patchelf curl xz-utils
+          # Fallback אם מסיבה כלשהי cargo לא קיים (למשל כשל זמני ב-rustup)
+          if ! command -v cargo >/dev/null 2>&1; then
+            sudo apt-get install -y rustc cargo
+          fi
       
       - name: Install flutter_distributor
         run: dart pub global activate flutter_distributor
       
-      - name: Build Flutter Linux app
+      - name: Build Flutter Linux app (with retry)
         run: |
-          flutter build linux
+          set -e
+          tries=0
+          until [ $tries -ge 3 ]
+          do
+            if flutter build linux; then
+              break
+            fi
+            tries=$((tries+1))
+            echo "flutter build linux failed. retry $tries/3 after short sleep..."
+            sleep 15
+          done
+          if [ $tries -ge 3 ]; then
+            echo "::error::flutter build linux failed after 3 attempts"
+            exit 1
+          fi
       
       - name: Build and Patch Linux DEB package
         shell: bash
@@ -287,6 +354,10 @@ jobs:
   build_macos:
     if: github.event_name != 'release'
     runs-on: macos-latest
+    env:
+      # אחסון יציב בתוך ה-workspace כדי למנוע תקלות rename של rustup
+      RUSTUP_HOME: ${{ github.workspace }}/.rustup
+      CARGO_HOME:  ${{ github.workspace }}/.cargo
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
@@ -296,11 +367,34 @@ jobs:
         with:
           channel: stable
           cache: true
-      
+
+      # התקנת Rust יציבה לפני flutter build
+      - name: Install Rust (stable)
+      # מחליף את ההתקנה האוטומטית של cargokit
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add cargo to PATH & verify toolchain
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          rustc -Vv
+          cargo -V
+          rustup show
+
+      # (רשות אבל מומלץ) קאשינג לספריות cargo כדי לזרז בניות
+      - name: Cache cargo registry and git
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CARGO_HOME }}/registry
+            ${{ env.CARGO_HOME }}/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Build Flutter macOS app
         run: |
           flutter build macos
-     
+
       - name: Upload macos build
         uses: actions/upload-artifact@v4
         with:
@@ -334,17 +428,17 @@ jobs:
           fi
           
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+            echo "tag=$VERSION" >> $GITHUB_OUTPUT
             echo "prerelease=false" >> $GITHUB_OUTPUT
-            echo "title=Otzaria v$VERSION" >> $GITHUB_OUTPUT
+            echo "title=Otzaria $VERSION" >> $GITHUB_OUTPUT
           else
             # Use proper semver pre-release format with dots instead of hyphens
             BRANCH_NAME="${{ github.ref_name }}"
             # Replace any invalid characters in branch name for semver
             CLEAN_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^A-Za-z0-9.-]/-/g')
-            echo "tag=v$VERSION-$CLEAN_BRANCH.${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "tag=$VERSION+${{ github.run_number }}" >> $GITHUB_OUTPUT
             echo "prerelease=true" >> $GITHUB_OUTPUT
-            echo "title=Otzaria v$VERSION (Preview from ${{ github.ref_name }})" >> $GITHUB_OUTPUT
+            echo "title=Otzaria $VERSION (Preview from ${{ github.ref_name }})" >> $GITHUB_OUTPUT
           fi
 
 
@@ -408,6 +502,7 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v1
         with:
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.title }}
           prerelease: ${{ steps.version.outputs.prerelease }}
@@ -458,8 +553,8 @@ jobs:
           fi
           
           # Use proper semver pre-release format with dots instead of hyphens for PR builds
-          echo "tag=v$VERSION-pr.${{ github.event.number }}.${{ github.run_number }}" >> $GITHUB_OUTPUT
-          echo "title=Otzaria v$VERSION - PR #${{ github.event.number }} Preview" >> $GITHUB_OUTPUT
+          echo "tag=$VERSION+${{ github.event.number }}.${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "title=Otzaria $VERSION - PR #${{ github.event.number }} Preview" >> $GITHUB_OUTPUT
 
       - name: Get commit message
         id: commit
@@ -510,6 +605,7 @@ jobs:
       - name: Create PR Pre-release
         uses: softprops/action-gh-release@v1
         with:
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.title }}
           prerelease: true
