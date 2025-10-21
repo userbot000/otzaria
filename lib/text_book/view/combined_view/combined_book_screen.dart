@@ -21,6 +21,7 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/notes/notes_system.dart';
 import 'package:otzaria/utils/copy_utils.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+import 'package:otzaria/utils/html_link_handler.dart';
 
 class CombinedView extends StatefulWidget {
   CombinedView({
@@ -775,6 +776,7 @@ $htmlWithBreaks
                 fontFamily: settingsState.fontFamily,
                 height: 1.5,
               ),
+              onTapUrl: (url) => HtmlLinkHandler.handleLink(context, url, widget.openBookCallback),
             );
           },
         ),
