@@ -129,12 +129,18 @@ class HtmlLinkHandler {
     try {
       // חיפוש הספר בספרייה
       final library = await DataRepository.instance.library;
-      final book = await library.findBookByTitle(bookTitle, TextBook);
+      final foundBook = await library.findBookByTitle(bookTitle, TextBook);
       
-      if (book == null) {
+      if (foundBook == null) {
         throw Exception('לא נמצא ספר בשם: $bookTitle');
       }
 
+      // וידוא שזה TextBook
+      if (foundBook is! TextBook) {
+        throw Exception('הספר $bookTitle אינו ספר טקסט');
+      }
+
+      final book = foundBook as TextBook;
       int startIndex = 0;
       
       // אם צוינה כותרת, נחפש את האינדקס שלה
