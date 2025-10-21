@@ -49,114 +49,6 @@ class _CombinedViewState extends State<CombinedView> {
       GlobalKey<SelectionAreaState>();
   bool _didInitialJump = false;
 
-  /// טיפול בלחיצה על קישורים לספרים
-  /// תומך בקישורים לכותרות: book://ברכות#דף_לא
-  /// משתמש במערכת TOC הקיימת לחיפוש וניווט לכותרות
-  void _handleBookLink(String? url) {
-    if (url == null || url.isEmpty) return;
-    
-    // אם זה קישור לספר מקומי (מתחיל ב-book://)
-    if (url.startsWith('book://')) {
-      final urlContent = url.substring(7); // הסרת הקידומת book://
-      
-      // בדיקה אם יש כותרת או דף ספציפי (מופרד ב-#)
-      final parts = urlContent.split('#');
-      final bookTitle = parts[0].replaceAll('_', ' '); // תמיכה בשמות עם רווחים
-      int pageIndex = 0;
-      String? tocTitle;
-      
-      // אם יש חלק ספציפי אחרי ה-#
-      if (parts.length > 1) {
-        // כל מה שאחרי ה-# הוא כותרת לחיפוש במערכת TOC
-        tocTitle = parts[1].replaceAll('_', ' ');
-      }
-      
-      // פתיחת הספר בתוכנה
-      final tab = TextBookTab(
-        book: TextBook(title: bookTitle),
-        index: pageIndex,
-        openLeftPane: (Settings.getValue<bool>('key-pin-sidebar') ?? false) ||
-            (Settings.getValue<bool>('key-default-sidebar-open') ?? false),
-      );
-      
-      widget.openBookCallback(tab);
-      
-      // אם יש כותרת לחיפוש, נחכה יותר זמן ונחפש
-      if (tocTitle != null && tocTitle.isNotEmpty) {
-        Future.delayed(const Duration(milliseconds: 1500), () {
-          _navigateToTocEntry(bookTitle, tocTitle);
-        });
-      }
-    }
-  }
-
-  /// חיפוש כותרת במערכת TOC וניווט אליה
-  void _navigateToTocEntry(String bookTitle, String tocTitle) async {
-    try {
-      // קבלת תוכן העניינים של הספר
-      final book = TextBook(title: bookTitle);
-      final tableOfContents = await book.tableOfContents;
-      
-      // חיפוש הכותרת ברשימת תוכן העניינים
-      TocEntry? foundEntry = _findTocEntryByTitle(tableOfContents, tocTitle);
-      
-      if (foundEntry != null) {
-        // נחכה רגע שהספר ייפתח ואז ננווט לכותרת
-        Future.delayed(const Duration(milliseconds: 500), () {
-          final currentState = context.read<TextBookBloc>().state;
-          if (currentState is TextBookLoaded) {
-            // ניווט לאינדקס של הכותרת
-            widget.tab.scrollController.scrollTo(
-              index: foundEntry.index,
-              duration: const Duration(milliseconds: 500),
-            );
-            
-            // עדכון האינדקס הנבחר
-            context.read<TextBookBloc>().add(UpdateSelectedIndex(foundEntry.index));
-          }
-        });
-      }
-    } catch (e) {
-      // אם יש שגיאה, פשוט נפתח את הספר בתחילה
-      print('Error navigating to TOC entry: $e');
-    }
-  }
-  
-  /// חיפוש כותרת ברשימת תוכן העניינים (רקורסיבי)
-  TocEntry? _findTocEntryByTitle(List<TocEntry> entries, String title) {
-    print('חיפוש כותרת: "$title"'); // debug
-    
-    for (final entry in entries) {
-      print('בודק כותרת: "${entry.text}"'); // debug
-      
-      // בדיקה מדויקת קודם
-      if (entry.text.trim() == title.trim()) {
-        print('נמצאה התאמה מדויקת!'); // debug
-        return entry;
-      }
-      
-      // בדיקה אם הכותרת מתאימה (ללא רגישות לרווחים וניקוד)
-      final cleanEntryText = utils.removeVolwels(entry.text.toLowerCase().trim());
-      final cleanFullText = utils.removeVolwels(entry.fullText.toLowerCase().trim());
-      final cleanSearchTitle = utils.removeVolwels(title.toLowerCase().trim());
-      
-      if (cleanEntryText.contains(cleanSearchTitle) || 
-          cleanFullText.contains(cleanSearchTitle) ||
-          cleanSearchTitle.contains(cleanEntryText)) {
-        print('נמצאה התאמה חלקית!'); // debug
-        return entry;
-      }
-      
-      // חיפוש רקורסיבי בילדים
-      final childResult = _findTocEntryByTitle(entry.children, title);
-      if (childResult != null) {
-        return childResult;
-      }
-    }
-    print('לא נמצאה כותרת'); // debug
-    return null;
-  }
-
   void _jumpToInitialIndexWhenReady() {
     int attempts = 0;
     void tryJump(Duration _) {
@@ -883,10 +775,6 @@ $htmlWithBreaks
                 fontFamily: settingsState.fontFamily,
                 height: 1.5,
               ),
-              onTapUrl: (url) {
-                _handleBookLink(url);
-                return true; // מציין שטיפלנו בקישור
-              },
             );
           },
         ),
