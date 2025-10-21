@@ -18,6 +18,7 @@ import 'package:otzaria/models/books.dart';
 import 'package:otzaria/notes/notes_system.dart';
 import 'package:otzaria/utils/copy_utils.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+import 'package:otzaria/utils/html_link_handler.dart';
 
 class SimpleBookView extends StatefulWidget {
   const SimpleBookView({
@@ -808,6 +809,7 @@ $htmlWithBreaks
                               }()}
                               </div>
                               ''',
+                              onTapUrl: (url) => HtmlLinkHandler.handleLink(context, url, widget.openBookCallback),
                             ),
                           ),
                         );
