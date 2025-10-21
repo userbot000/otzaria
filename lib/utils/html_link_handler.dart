@@ -129,10 +129,23 @@ class HtmlLinkHandler {
     try {
       // חיפוש הספר בספרייה
       final library = await DataRepository.instance.library;
+      
+      // קבלת רשימת כל הספרים לבדיקה
+      final allBooks = await library.getAllBooks();
+      
       final foundBook = await library.findBookByTitle(bookTitle, TextBook);
       
       if (foundBook == null) {
-        throw Exception('לא נמצא ספר בשם: $bookTitle');
+        // נסה לחפש בלי להגביל לטיפוס TextBook
+        final anyBook = await library.findBookByTitle(bookTitle);
+        
+        if (anyBook != null) {
+          throw Exception('הספר "$bookTitle" נמצא אבל הוא מטיפוס ${anyBook.runtimeType}, לא TextBook');
+        }
+        
+        // הצגת רשימת ספרים זמינים למשתמש
+        final availableBooks = allBooks.take(10).map((b) => b.title).join(', ');
+        throw Exception('לא נמצא ספר בשם: "$bookTitle".\nספרים זמינים (דוגמאות): $availableBooks');
       }
 
       // וידוא שזה TextBook
