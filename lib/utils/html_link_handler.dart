@@ -56,15 +56,16 @@ class HtmlLinkHandler {
 
       // אם זה לא קישור שאנחנו מטפלים בו, נחזיר false
       return false;
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('שגיאה בטיפול בקישור: $e');
+      debugPrint('Stack trace: $stackTrace');
       
       // הצגת הודעת שגיאה למשתמש
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('שגיאה בפתיחת הקישור: $url'),
-            duration: const Duration(seconds: 3),
+            content: Text('שגיאה בפתיחת הקישור: $e'),
+            duration: const Duration(seconds: 5),
           ),
         );
       }
