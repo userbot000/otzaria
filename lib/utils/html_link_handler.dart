@@ -138,7 +138,7 @@ class HtmlLinkHandler {
       
       if (foundBook == null) {
         // נסה לחפש בלי להגביל לטיפוס TextBook
-        final anyBook = await library.findBookByTitle(bookTitle);
+        final anyBook = await library.findBookByTitle(bookTitle, null);
         
         if (anyBook != null) {
           throw Exception('הספר "$bookTitle" נמצא אבל הוא מטיפוס ${anyBook.runtimeType}, לא TextBook');
