@@ -776,7 +776,9 @@ $htmlWithBreaks
                 fontFamily: settingsState.fontFamily,
                 height: 1.5,
               ),
-              onTapUrl: (url) => HtmlLinkHandler.handleLink(context, url, widget.openBookCallback),
+              onTapUrl: (url) async {
+                return await HtmlLinkHandler.handleLink(context, url, widget.openBookCallback);
+              },
             );
           },
         ),
