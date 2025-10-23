@@ -91,8 +91,8 @@ class HtmlLinkHandler {
         // ניווט לאינדקס שנמצא
         state.scrollController.scrollTo(
           index: index,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.ease,
         );
         
         if (context.mounted) {
