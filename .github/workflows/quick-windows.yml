@@ -1,0 +1,31 @@
+name: Quick Windows Build
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          cache-key: 'flutter-:os:-:channel:-:version:-:arch:-:hash:'
+          cache-path: '${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:'
+      
+      - name: Build
+        run: flutter build windows --release
+      
+      - name: Zip
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath otzaria-windows.zip
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: otzaria-windows
+          path: otzaria-windows.zip
