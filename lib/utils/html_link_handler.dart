@@ -10,6 +10,24 @@ import 'package:otzaria/utils/text_manipulation.dart' as utils;
 
 /// מחלקה לטיפול בקישורי HTML בתוך הטקסט
 class HtmlLinkHandler {
+  /// מנסה לפענח URL בצורה בטוחה, תומך בטקסט רגיל ו-URL encoded
+  static String _safeDecode(String text) {
+    if (text.isEmpty) return text;
+    
+    try {
+      // אם הטקסט מכיל % זה כנראה מקודד
+      if (text.contains('%')) {
+        return Uri.decodeComponent(text);
+      }
+      // אחרת, זה כבר טקסט רגיל
+      return text;
+    } catch (e) {
+      // אם הפענוח נכשל, נחזיר את הטקסט המקורי
+      debugPrint('Failed to decode URL component: $text, error: $e');
+      return text;
+    }
+  }
+
   /// מטפל בלחיצה על קישור HTML
   /// 
   /// הפונקציה מפרשת קישורים בפורמטים הבאים:
@@ -29,7 +47,7 @@ class HtmlLinkHandler {
     try {
       // בדיקה אם זה קישור פנימי לכותרת באותו ספר
       if (url.startsWith('#')) {
-        final headerName = Uri.decodeComponent(url.substring(1));
+        final headerName = _safeDecode(url.substring(1));
         await _navigateToHeader(context, headerName);
         return true;
       }
@@ -44,10 +62,10 @@ class HtmlLinkHandler {
         // בדיקה אם יש כותרת ספציפית
         if (bookUrl.contains('#')) {
           final parts = bookUrl.split('#');
-          bookTitle = Uri.decodeComponent(parts[0]);
-          headerName = Uri.decodeComponent(parts[1]);
+          bookTitle = _safeDecode(parts[0]);
+          headerName = _safeDecode(parts[1]);
         } else {
-          bookTitle = Uri.decodeComponent(bookUrl);
+          bookTitle = _safeDecode(bookUrl);
         }
         
         await _openBookWithHeader(context, bookTitle, headerName, openBookCallback);
