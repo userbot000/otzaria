@@ -809,7 +809,9 @@ $htmlWithBreaks
                               }()}
                               </div>
                               ''',
-                              onTapUrl: (url) => HtmlLinkHandler.handleLink(context, url, widget.openBookCallback),
+                              onTapUrl: (url) async {
+                                return await HtmlLinkHandler.handleLink(context, url, widget.openBookCallback);
+                              },
                             ),
                           ),
                         );
