@@ -87,7 +87,7 @@ class HtmlLinkHandler {
       final index = await _findHeaderIndex(state.book, headerName);
       if (index != null) {
         // ניווט לאינדקס שנמצא
-        state.scrollController.scrollTo(
+        await state.scrollController.scrollTo(
           index: index,
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOut,
