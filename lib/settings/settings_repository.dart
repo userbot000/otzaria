@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:otzaria/utils/color_utils.dart';
+import 'package:otzaria/utils/shortcut_validator.dart';
 import 'package:otzaria/utils/settings_wrapper.dart';
 
 class SettingsRepository {
@@ -136,6 +137,7 @@ class SettingsRepository {
         keyLibraryShowPreview,
         defaultValue: true,
       ),
+      'shortcuts': await getShortcuts(),
     };
   }
 
@@ -245,6 +247,50 @@ class SettingsRepository {
 
   Future<void> updateLibraryShowPreview(bool value) async {
     await _settings.setValue(keyLibraryShowPreview, value);
+  }
+
+  Future<Map<String, String>> getShortcuts() async {
+    // Start with the default shortcuts
+    final shortcuts = Map<String, String>.from(ShortcutValidator.defaultShortcuts);
+
+    // Load the central 'shortcuts' map which contains overrides
+    final Map<String, dynamic> savedShortcutsMap =
+        _settings.getValue('shortcuts', defaultValue: {});
+    shortcuts.addAll(savedShortcutsMap.cast<String, String>());
+
+    // Load individual shortcut keys, which take the highest precedence
+    // This is important for custom shortcuts set via the dialog
+    for (final key in ShortcutValidator.shortcutKeys) {
+      final value = _settings.getValue<String?>(key, defaultValue: null);
+      if (value != null) {
+        shortcuts[key] = value;
+      }
+    }
+
+    return Map<String, String>.unmodifiable(shortcuts);
+  }
+
+  Future<void> resetShortcuts() async {
+    // Remove all individual shortcut settings
+    for (final key in ShortcutValidator.shortcutKeys) {
+      await _settings.remove(key);
+    }
+    // Set the main shortcuts map back to the default values
+    await _settings.setValue(
+        'shortcuts', ShortcutValidator.defaultShortcuts);
+  }
+
+  Future<void> updateShortcut(String key, String value) async {
+    // Update the individual setting key for the UI
+    await _settings.setValue(key, value);
+    // Update the central shortcuts map for the application logic
+    final Map<String, dynamic> storedShortcuts =
+        _settings.getValue('shortcuts', defaultValue: {});
+    final updatedShortcuts = Map<String, String>.from(
+      storedShortcuts.cast<String, String>(),
+    );
+    updatedShortcuts[key] = value;
+    await _settings.setValue('shortcuts', updatedShortcuts);
   }
 
   /// Initialize default settings to disk if this is the first app launch

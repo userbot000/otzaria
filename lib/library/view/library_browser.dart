@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:otzaria/focus/focus_repository.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
 import 'package:otzaria/library/bloc/library_event.dart';
@@ -109,140 +110,147 @@ class _LibraryBrowserState extends State<LibraryBrowser>
               children: [
                 // תוכן הספרייה - תמיד מוצג (גם אם הספרייה null)
                 Scaffold(
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              appBar: AppBar(
-                title: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: DafYomi(
-                        onDafYomiTap: (tractate, daf) {
-                          openDafYomiBook(context, tractate, ' $daf.');
-                        },
-                        onCalendarTap: () {
-                          // Reset to calendar BEFORE navigation using GlobalKey
-                          (moreScreenKey.currentState as dynamic)?.resetToCalendar();
-                          // Then navigate
-                          context.read<NavigationBloc>().add(
-                                const NavigateToScreen(Screen.more),
-                              );
-                        },
-                      ),
-                    ),
-                    Text(
-                      state.currentCategory?.title ?? '',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.secondary,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child:
-                          _buildLibraryActions(context, state, settingsState),
-                    ),
-                  ],
-                ),
-              ),
-              body: LayoutBuilder(
-                builder: (context, constraints) {
-                  final screenWidth = constraints.maxWidth;
-                  // ברירת מחדל: שליש ברשת, שני שליש ברשימה
-                  final previewWidth = _viewMode == ViewMode.list
-                      ? (screenWidth * 2 / 3)
-                      : (screenWidth / 3);
-
-                  return Row(
-                    children: [
-                      // תוכן הספרייה - עכשיו בצד ימין
-                      Expanded(
-                        child: Column(
-                          children: [
-                            // שורת חיפוש והגדרות
-                            _buildSearchBar(state),
-                            if (context
-                                    .read<FocusRepository>()
-                                    .librarySearchController
-                                    .text
-                                    .length >
-                                2)
-                              _buildTopicsSelection(
-                                  context, state, settingsState),
-                            // תוכן הספרייה
-                            Expanded(child: _buildContent(state)),
-                          ],
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  appBar: AppBar(
+                    title: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: DafYomi(
+                            onDafYomiTap: (tractate, daf) {
+                              openDafYomiBook(context, tractate, ' $daf.');
+                            },
+                            onCalendarTap: () {
+                              // Reset to calendar BEFORE navigation using GlobalKey
+                              (moreScreenKey.currentState as dynamic)
+                                  ?.resetToCalendar();
+                              // Then navigate
+                              context.read<NavigationBloc>().add(
+                                    const NavigateToScreen(Screen.more),
+                                  );
+                            },
+                          ),
                         ),
-                      ),
-                      // פאנל תצוגה מקדימה בצד שמאל עם מסגרת ואפשרות שינוי גודל
-                      if (_showPreview)
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: ResizablePreviewPanel(
-                            key: ValueKey(
-                                screenWidth), // מפתח שמשתנה עם רוחב המסך
-                            initialWidth: previewWidth,
-                            minWidth: 300,
-                            maxWidth: screenWidth - 350, // השאר לפחות 350px לרשימה
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                border: Border.all(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .outline
-                                      .withValues(alpha: 0.3),
-                                  width: 1.0,
-                                ),
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(7.0),
-                                child: BlocBuilder<LibraryBloc, LibraryState>(
-                                  buildWhen: (previous, current) {
-                                    // רק אם previewBook השתנה
-                                    return previous.previewBook !=
-                                        current.previewBook;
-                                  },
-                                  builder: (context, previewState) {
-                                    return GestureDetector(
-                                      onDoubleTap: () {
-                                        if (previewState.previewBook != null) {
-                                          _openBookInReader(
-                                              previewState.previewBook!, 0);
-                                        }
+                        Text(
+                          state.currentCategory?.title ?? '',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.secondary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _buildLibraryActions(
+                              context, state, settingsState),
+                        ),
+                      ],
+                    ),
+                  ),
+                  body: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final screenWidth = constraints.maxWidth;
+                      // ברירת מחדל: שליש ברשת, שני שליש ברשימה
+                      final previewWidth = _viewMode == ViewMode.list
+                          ? (screenWidth * 2 / 3)
+                          : (screenWidth / 3);
+
+                      return Row(
+                        children: [
+                          // תוכן הספרייה - עכשיו בצד ימין
+                          Expanded(
+                            child: Column(
+                              children: [
+                                // שורת חיפוש והגדרות
+                                _buildSearchBar(state),
+                                if (context
+                                        .read<FocusRepository>()
+                                        .librarySearchController
+                                        .text
+                                        .length >
+                                    2)
+                                  _buildTopicsSelection(
+                                      context, state, settingsState),
+                                // תוכן הספרייה
+                                Expanded(child: _buildContent(state)),
+                              ],
+                            ),
+                          ),
+                          // פאנל תצוגה מקדימה בצד שמאל עם מסגרת ואפשרות שינוי גודל
+                          if (_showPreview)
+                            Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: ResizablePreviewPanel(
+                                key: ValueKey(
+                                    screenWidth), // מפתח שמשתנה עם רוחב המסך
+                                initialWidth: previewWidth,
+                                minWidth: 300,
+                                maxWidth: screenWidth -
+                                    350, // השאר לפחות 350px לרשימה
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Theme.of(context).colorScheme.surface,
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outline
+                                          .withValues(alpha: 0.3),
+                                      width: 1.0,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(7.0),
+                                    child:
+                                        BlocBuilder<LibraryBloc, LibraryState>(
+                                      buildWhen: (previous, current) {
+                                        // רק אם previewBook השתנה
+                                        return previous.previewBook !=
+                                            current.previewBook;
                                       },
-                                      child: BookPreviewPanel(
-                                        book: previewState.previewBook,
-                                        onOpenInReader: (index) {
-                                          if (previewState.previewBook != null) {
-                                            _openBookInReader(
-                                                previewState.previewBook!, index);
-                                          }
-                                        },
-                                        onClose: () {
-                                          setState(() {
-                                            _showPreview = false;
-                                          });
-                                          context.read<SettingsBloc>().add(
-                                                const UpdateLibraryShowPreview(
-                                                    false),
-                                              );
-                                        },
-                                      ),
-                                    );
-                                  },
+                                      builder: (context, previewState) {
+                                        return GestureDetector(
+                                          onDoubleTap: () {
+                                            if (previewState.previewBook !=
+                                                null) {
+                                              _openBookInReader(
+                                                  previewState.previewBook!, 0);
+                                            }
+                                          },
+                                          child: BookPreviewPanel(
+                                            book: previewState.previewBook,
+                                            onOpenInReader: (index) {
+                                              if (previewState.previewBook !=
+                                                  null) {
+                                                _openBookInReader(
+                                                    previewState.previewBook!,
+                                                    index);
+                                              }
+                                            },
+                                            onClose: () {
+                                              setState(() {
+                                                _showPreview = false;
+                                              });
+                                              context.read<SettingsBloc>().add(
+                                                    const UpdateLibraryShowPreview(
+                                                        false),
+                                                  );
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
                 // שכבת חסימה בזמן טעינה
                 if (state.isLoading)
                   Positioned.fill(
@@ -477,7 +485,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
     if (state.library == null || state.currentCategory == null) {
       return const Center(child: SizedBox.shrink());
     }
-    
+
     // במצב תצוגת רשת - תמיד רשת
     if (_viewMode == ViewMode.grid) {
       final items = state.searchResults != null
@@ -521,7 +529,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
       // במצב חיפוש ברשימה - הצג רק את הספרים
       return _buildSearchListView(state.searchResults!);
     }
-    
+
     // תצוגת רשימה עם עץ מתרחב
     return _buildListView(state.currentCategory!);
   }
@@ -1165,7 +1173,8 @@ class _LibraryBrowserState extends State<LibraryBrowser>
       ActionButtonData(
         widget: IconButton(
           icon: const Icon(FluentIcons.history_24_regular),
-          tooltip: 'הצג היסטוריה',
+          tooltip:
+              'הצג היסטוריה (${(Settings.getValue<String>('key-shortcut-open-history') ?? 'ctrl+h').toUpperCase()})',
           onPressed: () => _showHistoryDialog(context),
         ),
         icon: FluentIcons.history_24_regular,
@@ -1177,7 +1186,8 @@ class _LibraryBrowserState extends State<LibraryBrowser>
       ActionButtonData(
         widget: IconButton(
           icon: const Icon(FluentIcons.bookmark_24_regular),
-          tooltip: 'הצג סימניות',
+          tooltip:
+              'הצג סימניות (${(Settings.getValue<String>('key-shortcut-open-bookmarks') ?? 'ctrl+shift+b').toUpperCase()})',
           onPressed: () => _showBookmarksDialog(context),
         ),
         icon: FluentIcons.bookmark_24_regular,
@@ -1284,7 +1294,8 @@ class _LibraryBrowserState extends State<LibraryBrowser>
       ActionButtonData(
         widget: IconButton(
           icon: const Icon(FluentIcons.history_24_regular),
-          tooltip: 'הצג היסטוריה',
+          tooltip:
+              'הצג היסטוריה (${(Settings.getValue<String>('key-shortcut-open-history') ?? 'ctrl+h').toUpperCase()})',
           onPressed: () => _showHistoryDialog(context),
         ),
         icon: FluentIcons.history_24_regular,
@@ -1295,7 +1306,8 @@ class _LibraryBrowserState extends State<LibraryBrowser>
       ActionButtonData(
         widget: IconButton(
           icon: const Icon(FluentIcons.bookmark_24_regular),
-          tooltip: 'הצג סימניות',
+          tooltip:
+              'הצג סימניות (${(Settings.getValue<String>('key-shortcut-open-bookmarks') ?? 'ctrl+shift+b').toUpperCase()})',
           onPressed: () => _showBookmarksDialog(context),
         ),
         icon: FluentIcons.bookmark_24_regular,
@@ -1374,7 +1386,7 @@ class _LoadingDotsText extends StatefulWidget {
 class _LoadingDotsTextState extends State<_LoadingDotsText>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  
+
   @override
   void initState() {
     super.initState();
@@ -1407,10 +1419,10 @@ class _LoadingDotsTextState extends State<_LoadingDotsText>
         } else {
           dots = 3;
         }
-        
+
         // יצירת מחרוזת עם 3 תווים: נקודות + רווחים
         final dotsString = '.' * dots + ' ' * (3 - dots);
-        
+
         return Text(
           'טוען ספרייה$dotsString',
           style: const TextStyle(

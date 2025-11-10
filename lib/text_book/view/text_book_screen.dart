@@ -1020,6 +1020,8 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   }
 
   Widget _buildBookmarkButton(BuildContext context, TextBookLoaded state) {
+    final shortcut =
+        Settings.getValue<String>('key-shortcut-add-bookmark') ?? 'ctrl+b';
     return IconButton(
       onPressed: () async {
         int index = state.positionsListener.itemPositions.value.first.index;
@@ -1037,7 +1039,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
             bookmarkAdded ? 'הסימניה נוספה בהצלחה' : 'הסימניה כבר קיימת');
       },
       icon: const Icon(FluentIcons.bookmark_add_24_regular),
-      tooltip: 'הוספת סימניה',
+      tooltip: 'הוספת סימניה (${shortcut.toUpperCase()})',
     );
   }
 
@@ -1056,14 +1058,18 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   }
 
   Widget _buildAddNoteButton(BuildContext context, TextBookLoaded state) {
+    final shortcut =
+        Settings.getValue<String>('key-shortcut-add-note') ?? 'ctrl+n';
     return IconButton(
       onPressed: () => _handleAddNotePress(context, state),
       icon: const Icon(FluentIcons.note_add_24_regular),
-      tooltip: 'הוסף הערה לקטע זה',
+      tooltip: 'הוסף הערה לקטע זה (${shortcut.toUpperCase()})',
     );
   }
 
   Widget _buildSearchButton(BuildContext context, TextBookLoaded state) {
+    final shortcut =
+        Settings.getValue<String>('key-shortcut-search-in-book') ?? 'ctrl+f';
     return IconButton(
       onPressed: () {
         context.read<TextBookBloc>().add(const ToggleLeftPane(true));
@@ -1071,14 +1077,14 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         textSearchFocusNode.requestFocus();
       },
       icon: const Icon(FluentIcons.search_24_regular),
-      tooltip: 'חיפוש',
+      tooltip: 'חיפוש (${shortcut.toUpperCase()})',
     );
   }
 
   Widget _buildZoomInButton(BuildContext context, TextBookLoaded state) {
     return IconButton(
       icon: const Icon(FluentIcons.zoom_in_24_regular),
-      tooltip: 'הגדלת טקסט',
+      tooltip: 'הגדלת טקסט (CTRL + +)',
       onPressed: () => context.read<TextBookBloc>().add(
             UpdateFontSize(min(50.0, state.fontSize + 3)),
           ),
@@ -1088,7 +1094,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   Widget _buildZoomOutButton(BuildContext context, TextBookLoaded state) {
     return IconButton(
       icon: const Icon(FluentIcons.zoom_out_24_regular),
-      tooltip: 'הקטנת טקסט',
+      tooltip: 'הקטנת טקסט (CTRL + -)',
       onPressed: () => context.read<TextBookBloc>().add(
             UpdateFontSize(max(15.0, state.fontSize - 3)),
           ),
@@ -1098,7 +1104,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   Widget _buildFirstPageButton(TextBookLoaded state) {
     return IconButton(
       icon: const Icon(FluentIcons.arrow_previous_24_filled),
-      tooltip: 'תחילת הספר',
+      tooltip: 'תחילת הספר (CTRL + HOME)',
       onPressed: () {
         state.scrollController.scrollTo(
           index: 0,
@@ -1143,7 +1149,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   Widget _buildLastPageButton(TextBookLoaded state) {
     return IconButton(
       icon: const Icon(FluentIcons.arrow_next_24_filled),
-      tooltip: 'סוף הספר',
+      tooltip: 'סוף הספר (CTRL + END)',
       onPressed: () {
         state.scrollController.scrollTo(
           index: state.content.length,
@@ -1154,9 +1160,11 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   }
 
   Widget _buildPrintButton(BuildContext context, TextBookLoaded state) {
+    final shortcut =
+        Settings.getValue<String>('key-shortcut-print') ?? 'ctrl+p';
     return IconButton(
       icon: const Icon(FluentIcons.print_24_regular),
-      tooltip: 'הדפסה',
+      tooltip: 'הדפסה (${shortcut.toUpperCase()})',
       onPressed: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => PrintingScreen(
@@ -2772,10 +2780,12 @@ class _RegularReportTabState extends State<_RegularReportTab> {
 }
 
 Widget _buildFullFileEditorButton(BuildContext context, TextBookLoaded state) {
+  final shortcut =
+      Settings.getValue<String>('key-shortcut-edit-section') ?? 'ctrl+e';
   return IconButton(
     onPressed: () => _handleFullFileEditorPress(context, state),
     icon: const Icon(FluentIcons.document_edit_24_regular),
-    tooltip: 'ערוך את הספר (Ctrl+Shift+E)',
+    tooltip: 'ערוך את הספר (${shortcut.toUpperCase()})',
   );
 }
 

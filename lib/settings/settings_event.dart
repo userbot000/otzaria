@@ -225,3 +225,22 @@ class UpdateLibraryShowPreview extends SettingsEvent {
   @override
   List<Object?> get props => [libraryShowPreview];
 }
+
+class RefreshShortcuts extends SettingsEvent {
+  const RefreshShortcuts();
+
+  @override
+  List<Object?> get props => [];
+}
+
+class ResetShortcuts extends SettingsEvent {}
+
+class UpdateShortcut extends SettingsEvent {
+  final String key;
+  final String value;
+
+  const UpdateShortcut(this.key, this.value);
+
+  @override
+  List<Object?> get props => [key, value];
+}
