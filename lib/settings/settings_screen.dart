@@ -1137,11 +1137,14 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                         ),
                       ]),
                     if (!(Platform.isAndroid || Platform.isIOS))
-                      SimpleSettingsTile(
-                        title: 'הוסף ספרים למאגר',
-                        subtitle: 'ייבא ספרים מתיקייה למאגר הנתונים',
-                        leading: const Icon(FluentIcons.arrow_upload_24_regular),
-                        onTap: () async {
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SimpleSettingsTile(
+                              title: 'הוסף ספרים',
+                              subtitle: 'ייבא מתיקייה',
+                              leading: const Icon(FluentIcons.arrow_upload_24_regular),
+                              onTap: () async {
                           print('🚀 Starting import process...');
                           
                           // Select folder
@@ -1211,7 +1214,13 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                               bool createBackup = false;  // Changed default to false
                               return StatefulBuilder(
                                 builder: (context, setState) => AlertDialog(
-                                  title: const Text('📚 ייבוא ספרים'),
+                                  title: const Row(
+                                    children: [
+                                      Icon(FluentIcons.arrow_upload_24_regular),
+                                      SizedBox(width: 8),
+                                      Text('ייבוא ספרים'),
+                                    ],
+                                  ),
                                   content: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1301,13 +1310,15 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                             createBackup: createBackup,
                           );
                         },
-                      ),
-                    if (!(Platform.isAndroid || Platform.isIOS))
-                      SimpleSettingsTile(
-                        title: 'הסר תיקיות מהמאגר',
-                        subtitle: 'מחק תיקיות וכל הספרים שלהן מהמאגר',
-                        leading: const Icon(FluentIcons.delete_24_regular),
-                        onTap: () async {
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: SimpleSettingsTile(
+                              title: 'הסר תיקיות',
+                              subtitle: 'מחק מהמאגר',
+                              leading: const Icon(FluentIcons.delete_24_regular),
+                              onTap: () async {
                           final libraryPath = Settings.getValue<String>('key-library-path');
                           if (libraryPath == null) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -1646,6 +1657,9 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                             },
                           );
                         },
+                            ),
+                          ),
+                        ],
                       ),
                     SwitchSettingsTile(
                       settingKey: 'key-dev-channel',
