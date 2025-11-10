@@ -75,9 +75,9 @@ class _MySettingsScreenState extends State<MySettingsScreen>
 
                     // Refresh library when complete
                     if (status == 'הושלם בהצלחה!') {
+                      // Reload library immediately with full refresh
                       if (context.mounted) {
-                        // Force library refresh
-                        context.read<LibraryBloc>().add(LoadLibrary());
+                        context.read<LibraryBloc>().add(RefreshLibrary());
                       }
                     }
                   }
@@ -103,9 +103,6 @@ class _MySettingsScreenState extends State<MySettingsScreen>
             final progress = (currentBook != null && totalBooks != null && totalBooks! > 0)
                 ? currentBook! / totalBooks!
                 : 0.0;
-
-            final isComplete = statusText.contains('הושלם בהצלחה');
-            final isError = statusText.contains('שגיאה');
             
             return AlertDialog(
               title: const Text('מייבא ספרים'),
@@ -114,11 +111,7 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (isComplete)
-                      const Icon(Icons.check_circle, color: Colors.green, size: 48)
-                    else if (isError)
-                      const Icon(Icons.error, color: Colors.red, size: 48)
-                    else if (currentBook != null && totalBooks != null) ...[
+                    if (currentBook != null && totalBooks != null) ...[
                       LinearProgressIndicator(
                         value: progress,
                         minHeight: 8,
@@ -149,6 +142,16 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                   TextButton(
                     onPressed: () {
                       Navigator.pop(dialogContext);
+                      // Show success message after dialog closes
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('הייבוא הושלם והספרייה נטענה מחדש'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
                     },
                     child: const Text('סגור'),
                   )
@@ -1205,7 +1208,7 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                           final confirmed = await showDialog<Map<String, dynamic>>(
                             context: context,
                             builder: (context) {
-                              bool createBackup = true;
+                              bool createBackup = false;  // Changed default to false
                               return StatefulBuilder(
                                 builder: (context, setState) => AlertDialog(
                                   title: const Text('📚 ייבוא ספרים'),
@@ -1239,16 +1242,24 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                                         value: createBackup,
                                         onChanged: (value) {
                                           setState(() {
-                                            createBackup = value ?? true;
+                                            createBackup = value ?? false;
                                           });
                                         },
                                         dense: true,
                                         contentPadding: EdgeInsets.zero,
                                       ),
                                       const SizedBox(height: 8),
-                                      const Text(
-                                        '⚠️ אם אין מספיק מקום בדיסק, בטל את הגיבוי.',
-                                        style: TextStyle(fontSize: 11, color: Colors.orange),
+                                      const Row(
+                                        children: [
+                                          Icon(FluentIcons.info_24_regular, size: 16, color: Colors.orange),
+                                          SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              'אם אין מספיק מקום בדיסק, בטל את הגיבוי.',
+                                              style: TextStyle(fontSize: 11, color: Colors.orange),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -1275,7 +1286,7 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                             return;
                           }
                           
-                          final createBackup = confirmed['createBackup'] as bool? ?? true;
+                          final createBackup = confirmed['createBackup'] as bool? ?? false;
                           print('✅ User confirmed import (backup: $createBackup)');
                           
                           // Show progress dialog
@@ -1477,7 +1488,13 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                           final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
-                              title: const Text('⚠️ אישור מחיקה'),
+                              title: const Row(
+                                children: [
+                                  Icon(FluentIcons.warning_24_regular, color: Colors.orange),
+                                  SizedBox(width: 8),
+                                  Text('אישור מחיקה'),
+                                ],
+                              ),
                               content: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1524,6 +1541,10 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                           if (confirmed != true) return;
                           if (!context.mounted) return;
 
+                          // Save context and bloc before dialog opens
+                          final savedContext = context;
+                          final libraryBloc = context.read<LibraryBloc>();
+
                           // Show progress dialog
                           String statusText = 'מתחיל...';
                           int currentIndex = 0;
@@ -1543,18 +1564,29 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                                     Future<void> deleteNext() async {
                                       if (currentIndex >= selectedCategories.length) {
                                         // All done
+                                        print('🎉 All ${selectedCategories.length} categories deleted');
+                                        
+                                        // Close dialog first
                                         if (dialogContext.mounted) {
                                           Navigator.pop(dialogContext);
                                         }
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
+                                        
+                                        // Wait a bit for dialog to close
+                                        await Future.delayed(const Duration(milliseconds: 300));
+                                        
+                                        // Reload library using saved bloc
+                                        print('🔄 Refreshing library...');
+                                        libraryBloc.add(RefreshLibrary());
+                                        print('✅ RefreshLibrary event sent');
+                                        
+                                        if (savedContext.mounted) {
+                                          ScaffoldMessenger.of(savedContext).showSnackBar(
                                             SnackBar(
-                                              content: Text('${selectedCategories.length} תיקיות נמחקו בהצלחה'),
+                                              content: Text('${selectedCategories.length} תיקיות נמחקו והספרייה נטענה מחדש'),
                                               backgroundColor: Colors.green,
+                                              duration: const Duration(seconds: 3),
                                             ),
                                           );
-                                          // Refresh library
-                                          context.read<LibraryBloc>().add(LoadLibrary());
                                         }
                                         return;
                                       }
@@ -1591,7 +1623,11 @@ class _MySettingsScreenState extends State<MySettingsScreen>
                                       }
                                     }
                                     
-                                    deleteNext();
+                                    // Start deletion process
+                                    deleteNext().then((_) {
+                                      // Deletion completed
+                                      print('✅ All deletions completed');
+                                    });
                                   }
 
                                   return AlertDialog(

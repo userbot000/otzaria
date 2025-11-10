@@ -163,17 +163,12 @@ class FileSystemData {
 
       // Update book order based on generation (from CSV) before sorting
       if (category.books.isNotEmpty) {
-        debugPrint('📂 Processing category: ${category.title} (${category.books.length} books)');
         await _updateBooksOrderByGeneration(category.books);
       }
       
       // Sort categories and books by their order
       category.subCategories.sort((a, b) => a.order.compareTo(b.order));
       category.books.sort((a, b) => a.order.compareTo(b.order));
-      
-      if (category.books.isNotEmpty && category.books.length <= 5) {
-        debugPrint('   After sort: ${category.books.map((b) => "${b.title} (${b.order})").join(", ")}');
-      }
       
       return category;
     }
@@ -967,8 +962,6 @@ class FileSystemData {
   Future<void> _updateBooksOrderByGeneration(List<Book> books) async {
     if (books.isEmpty) return;
     
-    debugPrint('📚 Updating order for ${books.length} books by generation...');
-    
     // Generation order mapping
     const generationOrder = {
       'תורה שבכתב': 100,
@@ -978,9 +971,6 @@ class FileSystemData {
       'מחברי זמננו': 500,
       'מפרשים נוספים': 600,
     };
-    
-    int updatedCount = 0;
-    final Map<String, int> generationCounts = {};
     
     for (final book in books) {
       final originalOrder = book.order;
@@ -995,9 +985,6 @@ class FileSystemData {
         }
       }
       
-      // Count books per generation
-      generationCounts[generation] = (generationCounts[generation] ?? 0) + 1;
-      
       // Update order: generation base + original order
       // This keeps books in same generation together, but preserves relative order within generation
       final baseOrder = generationOrder[generation] ?? 600;
@@ -1009,19 +996,7 @@ class FileSystemData {
         // Preserve original order within generation (0-99 range)
         book.order = baseOrder + (originalOrder % 100);
       }
-      
-      if (book.order != originalOrder) {
-        updatedCount++;
-        if (updatedCount <= 3) {
-          debugPrint('   "${book.title}": $originalOrder → ${book.order} ($generation)');
-        }
-      }
     }
-    
-    debugPrint('✅ Updated $updatedCount books. Distribution:');
-    generationCounts.forEach((gen, count) {
-      debugPrint('   $gen: $count books');
-    });
   }
 
   /// Checks if a book with the given title exists in the library.

@@ -595,38 +595,45 @@ class DatabaseImportService {
       await db.transaction((txn) async {
         // Clear existing closure table
         await txn.delete('category_closure');
-        print('   ✅ Cleared old closure data');
         
-        // Get all categories
-        final categories = await txn.query('category', columns: ['id', 'parentId']);
+        // Get all categories ordered by level (parents first)
+        final categories = await txn.rawQuery('''
+          SELECT id, parentId FROM category ORDER BY level ASC, id ASC
+        ''');
         
-        // Build closure table: for each category, find all its ancestors
+        // Build ancestor map in memory (much faster than queries)
+        final Map<int, Set<int>> ancestorMap = {};
+        
+        // Use batch for all inserts
+        final batch = txn.batch();
+        
         for (final cat in categories) {
           final catId = cat['id'] as int;
           final parentId = cat['parentId'] as int?;
           
-          // Self-reference
-          await txn.insert('category_closure', {
+          // Initialize ancestor set for this category
+          ancestorMap[catId] = <int>{catId}; // Self-reference
+          
+          // Add self-reference to batch
+          batch.insert('category_closure', {
             'ancestorId': catId,
             'descendantId': catId,
           });
           
-          // Add all ancestors
-          if (parentId != null) {
-            // Find all ancestors of the parent
-            final ancestors = await txn.rawQuery('''
-              SELECT ancestorId FROM category_closure
-              WHERE descendantId = ?
-            ''', [parentId]);
-            
-            for (final ancestor in ancestors) {
-              await txn.insert('category_closure', {
-                'ancestorId': ancestor['ancestorId'],
+          // Add all ancestors from parent
+          if (parentId != null && ancestorMap.containsKey(parentId)) {
+            for (final ancestorId in ancestorMap[parentId]!) {
+              ancestorMap[catId]!.add(ancestorId);
+              batch.insert('category_closure', {
+                'ancestorId': ancestorId,
                 'descendantId': catId,
               });
             }
           }
         }
+        
+        // Commit all inserts at once
+        await batch.commit(noResult: true);
         
         print('   ✅ Rebuilt closure table with ${categories.length} categories');
       });
