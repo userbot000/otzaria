@@ -20,6 +20,7 @@ import 'package:otzaria/settings/settings_screen.dart';
 import 'package:otzaria/navigation/more_screen.dart';
 import 'package:otzaria/navigation/about_dialog.dart';
 import 'package:otzaria/widgets/keyboard_shortcuts.dart';
+import 'dart:async';
 import 'package:otzaria/update/my_updat_widget.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
@@ -101,6 +102,24 @@ class MainWindowScreenState extends State<MainWindowScreen>
           pageController.jumpToPage(targetPage);
         }
       });
+    }
+  }
+
+  /// ודאו שה-PageView מסונכרן למצב הניווט הנוכחי גם אם בחרו שוב באותו יעד.
+  Future<void> _syncPageWithState({bool animate = true}) async {
+    if (!mounted || !pageController.hasClients) return;
+    final currentScreen = context.read<NavigationBloc>().state.currentScreen;
+    final targetPage = _pageIndexForScreen(currentScreen);
+    if (targetPage == null) return;
+    if (pageController.page?.round() == targetPage) return;
+    if (animate) {
+      await pageController.animateToPage(
+        targetPage,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      pageController.jumpToPage(targetPage);
     }
   }
 
@@ -347,7 +366,15 @@ class MainWindowScreenState extends State<MainWindowScreen>
                               selectedIndex: _getSelectedIndex(
                                 state.currentScreen,
                               ),
-                              onDestinationSelected: (index) {
+                              onDestinationSelected: (index) async {
+                                // אם בחרו שוב באותו היעד – רק סנכרנו את ה-PageView למסך
+                                final currentIndex =
+                                    _getSelectedIndex(state.currentScreen);
+                                if (index == currentIndex) {
+                                  // סנכרון ידני – שימושי כאשר מסיבה כלשהי ה-PageView סטה מהמצב
+                                  await _syncPageWithState();
+                                  return;
+                                }
                                 if (index == Screen.search.index) {
                                   _handleSearchTabOpen(context);
                                 } else if (index == Screen.find.index) {
@@ -486,7 +513,13 @@ class MainWindowScreenState extends State<MainWindowScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            onPressed: () {
+            onPressed: () async {
+              // אם בחרו שוב באותו היעד – רק סנכרנו את ה-PageView למסך
+              final currentIndex = _getSelectedIndex(currentScreen);
+              if (index == currentIndex) {
+                await _syncPageWithState();
+                return;
+              }
               if (index == Screen.search.index) {
                 _handleSearchTabOpen(context);
               } else if (index == Screen.find.index) {

@@ -89,6 +89,7 @@ void main() {
             isFullscreen: mockSettings['isFullscreen'] as bool,
             libraryViewMode: mockSettings['libraryViewMode'] as String,
             libraryShowPreview: mockSettings['libraryShowPreview'] as bool,
+            shortcuts: const {},
           ),
         ],
         verify: (_) {

@@ -26,6 +26,7 @@ class SettingsState extends Equatable {
   final bool isFullscreen;
   final String libraryViewMode;
   final bool libraryShowPreview;
+  final Map<String, String> shortcuts;
 
   const SettingsState({
     required this.isDarkMode,
@@ -52,6 +53,7 @@ class SettingsState extends Equatable {
     required this.isFullscreen,
     required this.libraryViewMode,
     required this.libraryShowPreview,
+    required this.shortcuts,
   });
 
   factory SettingsState.initial() {
@@ -80,6 +82,7 @@ class SettingsState extends Equatable {
       isFullscreen: false,
       libraryViewMode: 'grid',
       libraryShowPreview: true,
+      shortcuts: {},
     );
   }
 
@@ -108,6 +111,7 @@ class SettingsState extends Equatable {
     bool? isFullscreen,
     String? libraryViewMode,
     bool? libraryShowPreview,
+    Map<String, String>? shortcuts,
   }) {
     return SettingsState(
       isDarkMode: isDarkMode ?? this.isDarkMode,
@@ -135,6 +139,7 @@ class SettingsState extends Equatable {
       isFullscreen: isFullscreen ?? this.isFullscreen,
       libraryViewMode: libraryViewMode ?? this.libraryViewMode,
       libraryShowPreview: libraryShowPreview ?? this.libraryShowPreview,
+      shortcuts: shortcuts ?? this.shortcuts,
     );
   }
 
@@ -164,5 +169,6 @@ class SettingsState extends Equatable {
         isFullscreen,
         libraryViewMode,
         libraryShowPreview,
+        shortcuts,
       ];
 }

@@ -10,7 +10,12 @@ class SettingsWrapper {
   }
 
   /// Sets a value in settings.
-  Future<void> setValue<T>(String key, T value) async {
-    await Settings.setValue<T>(key, value);
+  Future<void> setValue<T>(String key, T value) {
+    return Settings.setValue<T>(key, value);
+  }
+
+  /// Removes a value from settings.
+  Future<void> remove(String key) {
+    return Settings.setValue<String?>(key, null);
   }
 }

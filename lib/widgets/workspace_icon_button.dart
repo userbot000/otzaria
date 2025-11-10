@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_state.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
+import 'dart:async';
+import 'package:otzaria/settings/settings_bloc.dart';
 
 class WorkspaceIconButton extends StatefulWidget {
   final VoidCallback onPressed;
-  
+
   const WorkspaceIconButton({
     super.key,
     required this.onPressed,
@@ -22,6 +25,7 @@ class _WorkspaceIconButtonState extends State<WorkspaceIconButton>
   bool _isHovered = false;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
+  StreamSubscription<void>? _shortcutsSubscription;
 
   @override
   void initState() {
@@ -37,18 +41,29 @@ class _WorkspaceIconButtonState extends State<WorkspaceIconButton>
       parent: _animationController,
       curve: Curves.easeOutCubic,
     ));
-    
+
     // טוען את workspaces כשהwidget נוצר
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<WorkspaceBloc>().add(LoadWorkspaces());
       }
     });
+
+    // האזנה לשינויים בקיצורים
+    // context.watch<SettingsBloc>().state.shortcuts;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // האזנה לשינויים בקיצורים
+    context.watch<SettingsBloc>().state.shortcuts;
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _shortcutsSubscription?.cancel();
     super.dispose();
   }
 
@@ -81,15 +96,19 @@ class _WorkspaceIconButtonState extends State<WorkspaceIconButton>
       fontSize: 14,
       fontWeight: FontWeight.w500,
     );
-    
+
     // חישוב רוחב הטקסט
     final textWidth = _calculateTextWidth(workspaceName, textStyle);
-    
+
     // חישוב הרוחב הכולל: אייקון (20) + רווח (8) + טקסט + padding (24)
     final expandedWidth = (20 + 8 + textWidth + 24 + 8).clamp(40.0, 180.0);
 
+    // קריאת קיצור המקשים הדינמי
+    final workspaceShortcut =
+        Settings.getValue<String>('key-shortcut-switch-workspace') ?? 'ctrl+k';
+
     return Tooltip(
-      message: 'החלף שולחן עבודה',
+      message: 'החלף שולחן עבודה (${workspaceShortcut.toUpperCase()})',
       child: MouseRegion(
         onEnter: (_) {
           setState(() {
@@ -106,14 +125,18 @@ class _WorkspaceIconButtonState extends State<WorkspaceIconButton>
         child: AnimatedBuilder(
           animation: _scaleAnimation,
           builder: (context, child) {
-            final currentWidth = 48.0 + (expandedWidth - 48.0) * _scaleAnimation.value;
-            
+            final currentWidth =
+                48.0 + (expandedWidth - 48.0) * _scaleAnimation.value;
+
             return Container(
               width: currentWidth,
               height: 48.0,
               decoration: BoxDecoration(
                 color: _isHovered
-                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                    ? Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.1)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(24.0),
               ),

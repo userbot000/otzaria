@@ -84,15 +84,15 @@ class _ReadingScreenState extends State<ReadingScreen>
       },
       listenWhen: (previous, current) =>
           previous.currentTabIndex != current.currentTabIndex,
-      child: BlocBuilder<TabsBloc, TabsState>(
-        builder: (context, state) {
-          if (!state.hasOpenTabs) {
-            // אם אין טאבים פתוחים אין מה להציג
-            return const Center(child: Text('אין כרטיסיות פתוחות'));
-          }
+      child: BlocBuilder<SettingsBloc, SettingsState>(
+        builder: (context, settingsState) {
+          return BlocBuilder<TabsBloc, TabsState>(
+            builder: (context, state) {
+              if (!state.hasOpenTabs) {
+                // אם אין טאבים פתוחים אין מה להציג
+                return const Center(child: Text('אין כרטיסיות פתוחות'));
+              }
 
-          return Builder(
-            builder: (context) {
               final controller = TabController(
                 length: state.tabs.length,
                 vsync: this,
@@ -114,8 +114,24 @@ class _ReadingScreenState extends State<ReadingScreen>
                 }
               });
 
+              // קריאת הגדרות כדי לגרום ל-rebuild כשהן משתנות
+              final historyShortcut =
+                  Settings.getValue<String>('key-shortcut-open-history') ??
+                      'ctrl+h';
+              final bookmarksShortcut =
+                  Settings.getValue<String>('key-shortcut-open-bookmarks') ??
+                      'ctrl+shift+b';
+              final workspaceShortcut =
+                  Settings.getValue<String>('key-shortcut-switch-workspace') ??
+                      'ctrl+k';
+              final closeTabShortcut =
+                  Settings.getValue<String>('key-shortcut-close-tab') ??
+                      'ctrl+w';
+
               return Scaffold(
                 appBar: AppBar(
+                  key: ValueKey(
+                      'appbar_${historyShortcut}_${bookmarksShortcut}_${workspaceShortcut}_${closeTabShortcut}'),
                   // 1. משתמשים בקבוע שהגדרנו עבור הרוחב
                   leadingWidth: _kAppBarControlsWidth,
                   leading: Row(
@@ -124,12 +140,14 @@ class _ReadingScreenState extends State<ReadingScreen>
                       // קבוצת היסטוריה וסימניות
                       IconButton(
                         icon: const Icon(FluentIcons.history_24_regular),
-                        tooltip: 'הצג היסטוריה',
+                        tooltip:
+                            'הצג היסטוריה ($historyShortcut.toUpperCase())',
                         onPressed: () => _showHistoryDialog(context),
                       ),
                       IconButton(
                         icon: const Icon(FluentIcons.bookmark_24_regular),
-                        tooltip: 'הצג סימניות',
+                        tooltip:
+                            'הצג סימניות ($bookmarksShortcut.toUpperCase())',
                         onPressed: () => _showBookmarksDialog(context),
                       ),
                       // קו מפריד
@@ -142,7 +160,8 @@ class _ReadingScreenState extends State<ReadingScreen>
                       // קבוצת שולחן עבודה עם אנימציה
                       IconButton(
                         icon: const Icon(FluentIcons.add_square_24_regular),
-                        tooltip: 'החלף שולחן עבודה',
+                        tooltip:
+                            'החלף שולחן עבודה ($workspaceShortcut.toUpperCase())',
                         onPressed: () => _showSaveWorkspaceDialog(context),
                       ),
                     ],
@@ -263,6 +282,8 @@ class _ReadingScreenState extends State<ReadingScreen>
   Widget _buildTab(BuildContext context, OpenedTab tab, TabsState state) {
     final index = state.tabs.indexOf(tab);
     final isSelected = index == state.currentTabIndex;
+    final closeTabShortcut =
+        Settings.getValue<String>('key-shortcut-close-tab') ?? 'ctrl+w';
 
     return Listener(
       onPointerDown: (PointerDownEvent event) {
@@ -398,10 +419,7 @@ class _ReadingScreenState extends State<ReadingScreen>
                                   child: Text(truncate(tab.title, 12))),
                             Tooltip(
                               preferBelow: false,
-                              message: (Settings.getValue<String>(
-                                          'key-shortcut-close-tab') ??
-                                      'ctrl+w')
-                                  .toUpperCase(),
+                              message: closeTabShortcut.toUpperCase(),
                               child: IconButton(
                                 constraints: const BoxConstraints(
                                   minWidth: 25,
