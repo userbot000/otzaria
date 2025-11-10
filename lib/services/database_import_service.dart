@@ -51,6 +51,29 @@ class DatabaseImportService {
     print('✅ Removed "$categoryTitle" from imported categories list');
   }
 
+  /// Get all category IDs recursively (including subcategories)
+  static Future<List<int>> _getAllCategoryIdsRecursive(
+    DatabaseExecutor db,
+    int categoryId,
+  ) async {
+    final List<int> allIds = [categoryId];
+    
+    // Get direct children
+    final children = await db.rawQuery(
+      'SELECT id FROM category WHERE parentId = ?',
+      [categoryId],
+    );
+    
+    // Recursively get all descendants
+    for (final child in children) {
+      final childId = child['id'] as int;
+      final descendants = await _getAllCategoryIdsRecursive(db, childId);
+      allIds.addAll(descendants);
+    }
+    
+    return allIds;
+  }
+
   /// Remove a category and all its books from the database
   static Future<void> removeCategoryFromDatabase(
     String dbPath,
@@ -104,41 +127,66 @@ class DatabaseImportService {
 
       // Use proper transaction API for atomic operations
       await db.transaction((txn) async {
-        // Get all book IDs in this category
-        final bookIdsResult = await txn.query(
-          'book',
-          columns: ['id'],
-          where: 'categoryId = ?',
-          whereArgs: [categoryId],
+        // Get all categories to delete (including subcategories)
+        final allCategoryIds = await _getAllCategoryIdsRecursive(txn, categoryId);
+        print('📂 Total categories to delete (including subcategories): ${allCategoryIds.length}');
+        print('📂 Category IDs: $allCategoryIds');
+        
+        // Get all book IDs in all these categories
+        final placeholders = allCategoryIds.map((_) => '?').join(',');
+        final bookIdsResult = await txn.rawQuery(
+          'SELECT id FROM book WHERE categoryId IN ($placeholders)',
+          allCategoryIds,
         );
         final bookIds = bookIdsResult.map((row) => row['id'] as int).toList();
-        print('📚 Book IDs to delete: $bookIds');
+        print('📚 Total books to delete: ${bookIds.length}');
 
         if (bookIds.isNotEmpty) {
-          // Delete lines for these books
+          // Delete lines for these books (batch delete)
           onProgress?.call('מוחק שורות טקסט...');
-          for (final bookId in bookIds) {
-            await txn.delete('line', where: 'bookId = ?', whereArgs: [bookId]);
-          }
+          final bookPlaceholders = bookIds.map((_) => '?').join(',');
+          await txn.rawDelete(
+            'DELETE FROM line WHERE bookId IN ($bookPlaceholders)',
+            bookIds,
+          );
           print('✅ Lines deleted');
 
-          // Delete TOC entries for these books
+          // Delete TOC entries for these books (batch delete)
           onProgress?.call('מוחק תוכן עניינים...');
-          for (final bookId in bookIds) {
-            await txn.delete('tocEntry', where: 'bookId = ?', whereArgs: [bookId]);
-          }
+          await txn.rawDelete(
+            'DELETE FROM tocEntry WHERE bookId IN ($bookPlaceholders)',
+            bookIds,
+          );
           print('✅ TOC entries deleted');
 
-          // Delete books
+          // Delete books (batch delete)
           onProgress?.call('מוחק ספרים...');
-          await txn.delete('book', where: 'categoryId = ?', whereArgs: [categoryId]);
+          await txn.rawDelete(
+            'DELETE FROM book WHERE categoryId IN ($placeholders)',
+            allCategoryIds,
+          );
           print('✅ Books deleted');
         }
 
-        // Delete the category itself
-        onProgress?.call('מוחק קטגוריה...');
-        await txn.delete('category', where: 'id = ?', whereArgs: [categoryId]);
-        print('✅ Category deleted');
+        // Delete all categories (batch delete)
+        onProgress?.call('מוחק קטגוריות...');
+        await txn.rawDelete(
+          'DELETE FROM category WHERE id IN ($placeholders)',
+          allCategoryIds,
+        );
+        print('✅ Categories deleted');
+        
+        // Delete from category_closure table if it exists
+        try {
+          onProgress?.call('מעדכן עץ קטגוריות...');
+          await txn.rawDelete(
+            'DELETE FROM category_closure WHERE ancestorId IN ($placeholders) OR descendantId IN ($placeholders)',
+            [...allCategoryIds, ...allCategoryIds],
+          );
+          print('✅ Category closure updated');
+        } catch (e) {
+          print('⚠️ Could not update category_closure (table might not exist): $e');
+        }
       });
       
       print('✅ Transaction committed successfully');
@@ -196,6 +244,13 @@ class DatabaseImportService {
 
     final db = await databaseFactory.openDatabase(tempDbPath);
     print('✅ Temp database created');
+
+    // Enable performance optimizations for bulk insert
+    await db.execute('PRAGMA synchronous = OFF');
+    await db.execute('PRAGMA journal_mode = MEMORY');
+    await db.execute('PRAGMA temp_store = MEMORY');
+    await db.execute('PRAGMA cache_size = -64000'); // 64MB cache
+    print('✅ Performance optimizations enabled');
 
     try {
       // If mainDbPath provided, copy ALL tables schema from it
@@ -281,9 +336,9 @@ class DatabaseImportService {
         print('✅ TOC text table created');
       }
 
-      // Get all text files
+      // Get all text files (including subdirectories)
       final files = await folder
-          .list()
+          .list(recursive: true)
           .where((entity) =>
               entity is File &&
               (entity.path.endsWith('.txt') || entity.path.endsWith('.text')))
@@ -296,17 +351,72 @@ class DatabaseImportService {
         throw Exception('לא נמצאו קבצי טקסט בתיקייה');
       }
 
-      // Get folder name for category
-      final folderName = path.basename(folderPath);
-      print('📁 Using folder name as category: $folderName');
-
-      // Create category with folder name
+      // Build category tree structure
+      print('🌳 Building category tree...');
+      final categoryMap = <String, int>{}; // path -> categoryId
+      final rootFolderName = path.basename(folderPath);
+      int categoryId = 1;
+      
+      // Create root category
       await db.insert('category', {
-        'id': 1,
-        'title': folderName,
+        'id': categoryId,
+        'title': rootFolderName,
         'level': 0,
       });
-      print('✅ Category created: $folderName');
+      categoryMap[folderPath] = categoryId;
+      print('✅ Root category created: $rootFolderName (id: $categoryId)');
+      categoryId++;
+      
+      // Collect all unique directory paths from files (optimized)
+      final allDirs = <String>{};
+      for (final file in files) {
+        var dir = path.dirname(file.path);
+        while (dir != folderPath && dir.isNotEmpty) {
+          allDirs.add(dir);
+          final parent = path.dirname(dir);
+          if (parent == dir) break; // Reached root
+          dir = parent;
+        }
+      }
+      
+      // Sort directories by depth (shallow to deep) to create parent categories first
+      final sortedDirs = allDirs.toList()
+        ..sort((a, b) => a.split(path.separator).length.compareTo(b.split(path.separator).length));
+      
+      // Create categories for each subdirectory using batch insert
+      if (sortedDirs.isNotEmpty) {
+        final batch = db.batch();
+        
+        for (final dirPath in sortedDirs) {
+          if (categoryMap.containsKey(dirPath)) continue;
+          
+          final dirName = path.basename(dirPath);
+          final parentPath = path.dirname(dirPath);
+          final parentId = categoryMap[parentPath];
+          
+          if (parentId == null) {
+            print('⚠️ Parent not found for $dirName, using root');
+            continue;
+          }
+          
+          final level = dirPath.split(path.separator).length - folderPath.split(path.separator).length;
+          
+          batch.insert('category', {
+            'id': categoryId,
+            'title': dirName,
+            'parentId': parentId,
+            'level': level,
+          });
+          categoryMap[dirPath] = categoryId;
+          print('   ✅ Category: $dirName (id: $categoryId, parent: $parentId, level: $level)');
+          categoryId++;
+        }
+        
+        await batch.commit(noResult: true);
+        print('✅ Created ${categoryMap.length} categories (batch)');
+      } else {
+        print('✅ No subdirectories to create');
+      }
       
       // Create default source (if source table exists)
       try {
@@ -335,6 +445,9 @@ class DatabaseImportService {
       
       print('🔄 Starting to process ${files.length} files...');
       
+      // Wrap all file processing in a single transaction for maximum performance
+      await db.transaction((txn) async {
+      
       for (int i = 0; i < files.length; i++) {
         // Check for cancellation
         if (_isCancelled) {
@@ -360,18 +473,23 @@ class DatabaseImportService {
         onProgress?.call(i + 1, files.length, bookTitle);
 
         // Check for duplicates
-        final existing = await db.query('book', where: 'title = ?', whereArgs: [bookTitle]);
+        final existing = await txn.query('book', where: 'title = ?', whereArgs: [bookTitle]);
         if (existing.isNotEmpty) {
           print('   ⚠️ Book "$bookTitle" already exists, skipping');
           continue;
         }
 
+        // Find the correct category for this file based on its directory
+        final fileDir = path.dirname(file.path);
+        final fileCategoryId = categoryMap[fileDir] ?? categoryMap[folderPath] ?? 1;
+        print('   📁 Assigning to category ID: $fileCategoryId');
+
         // Insert book with all required fields
         try {
-          await db.insert('book', {
+          await txn.insert('book', {
             'id': bookId,
             'title': bookTitle,
-            'categoryId': 1,
+            'categoryId': fileCategoryId,
             'sourceId': 1,
             'orderIndex': bookId,  // Use bookId as order
             'totalLines': 0,  // Will be updated later
@@ -387,40 +505,46 @@ class DatabaseImportService {
           throw Exception('Failed to insert book "$bookTitle": $e');
         }
 
-        // Read and insert lines
+        // Read and insert lines with batch insert for performance
         print('   📝 Reading file content...');
         final content = await file.readAsString();
         final lines = content.split('\n');
         print('   📝 Found ${lines.length} lines');
 
         int linesInserted = 0;
+        
+        // Use batch insert within transaction for much better performance
+        final batch = txn.batch();
         for (int lineNum = 0; lineNum < lines.length; lineNum++) {
           final lineText = lines[lineNum].trim();
           if (lineText.isNotEmpty) {
-            try {
-              await db.insert('line', {
-                'id': lineId,
-                'bookId': bookId,
-                'lineIndex': lineNum,  // 0-based index
-                'content': lineText,   // 'content' not 'text'!
-              });
-              lineId++;
-              linesInserted++;
-            } catch (e) {
-              print('   ❌ Failed to insert line $lineNum: $e');
-              throw Exception('Failed to insert line in "$bookTitle": $e');
-            }
+            batch.insert('line', {
+              'id': lineId,
+              'bookId': bookId,
+              'lineIndex': lineNum,  // 0-based index
+              'content': lineText,   // 'content' not 'text'!
+            });
+            lineId++;
+            linesInserted++;
           }
         }
-        print('   ✅ Inserted $linesInserted lines');
+        
+        // Commit all lines at once
+        try {
+          await batch.commit(noResult: true);
+          print('   ✅ Inserted $linesInserted lines (batch)');
+        } catch (e) {
+          print('   ❌ Failed to insert lines: $e');
+          throw Exception('Failed to insert lines in "$bookTitle": $e');
+        }
 
         // Create simple TOC entry
-        await db.insert('tocText', {
+        await txn.insert('tocText', {
           'id': tocTextId,
           'text': bookTitle,
         });
 
-        await db.insert('tocEntry', {
+        await txn.insert('tocEntry', {
           'id': tocEntryId,
           'bookId': bookId,
           'parentId': null,  // 'parentId' not 'parent'
@@ -434,6 +558,12 @@ class DatabaseImportService {
         tocEntryId++;
         bookId++;
       }
+      
+      }); // End of transaction
+      print('✅ All files processed in single transaction');
+
+      // Clean up any duplicate categories that might have been created
+      await _cleanupDuplicateCategories(db);
 
       await db.close();
       return tempDbPath;
@@ -454,6 +584,120 @@ class DatabaseImportService {
     final columns = result.map((row) => row['name'] as String).toList();
     print('📋 Table $tableName columns: ${columns.join(", ")}');
     return columns;
+  }
+
+  /// Rebuild the category_closure table for hierarchical queries
+  /// This table is used for efficient tree traversal
+  static Future<void> _rebuildCategoryClosure(Database db) async {
+    print('🔄 Rebuilding category closure table...');
+    
+    try {
+      await db.transaction((txn) async {
+        // Clear existing closure table
+        await txn.delete('category_closure');
+        print('   ✅ Cleared old closure data');
+        
+        // Get all categories
+        final categories = await txn.query('category', columns: ['id', 'parentId']);
+        
+        // Build closure table: for each category, find all its ancestors
+        for (final cat in categories) {
+          final catId = cat['id'] as int;
+          final parentId = cat['parentId'] as int?;
+          
+          // Self-reference
+          await txn.insert('category_closure', {
+            'ancestorId': catId,
+            'descendantId': catId,
+          });
+          
+          // Add all ancestors
+          if (parentId != null) {
+            // Find all ancestors of the parent
+            final ancestors = await txn.rawQuery('''
+              SELECT ancestorId FROM category_closure
+              WHERE descendantId = ?
+            ''', [parentId]);
+            
+            for (final ancestor in ancestors) {
+              await txn.insert('category_closure', {
+                'ancestorId': ancestor['ancestorId'],
+                'descendantId': catId,
+              });
+            }
+          }
+        }
+        
+        print('   ✅ Rebuilt closure table with ${categories.length} categories');
+      });
+      
+      print('✅ Category closure table rebuilt successfully');
+    } catch (e) {
+      print('⚠️ Error rebuilding closure table: $e');
+      // Don't throw - this is not critical
+    }
+  }
+
+  /// Clean up duplicate categories (same title and parent)
+  /// Keeps the category with the lowest ID and updates all references
+  /// Note: This should be called OUTSIDE of any transaction
+  static Future<void> _cleanupDuplicateCategories(Database db) async {
+    print('🧹 Checking for duplicate categories...');
+    
+    try {
+      // Find duplicate categories (same title and parentId)
+      final duplicates = await db.rawQuery('''
+        SELECT title, parentId, GROUP_CONCAT(id) as ids, COUNT(*) as count
+        FROM category
+        GROUP BY title, IFNULL(parentId, 'NULL')
+        HAVING count > 1
+      ''');
+      
+      if (duplicates.isEmpty) {
+        print('✅ No duplicate categories found');
+        return;
+      }
+      
+      print('⚠️ Found ${duplicates.length} duplicate category groups');
+      
+      // Process each duplicate group in its own transaction
+      for (final dup in duplicates) {
+        await db.transaction((txn) async {
+          final title = dup['title'] as String;
+          final idsStr = dup['ids'] as String;
+          final ids = idsStr.split(',').map((s) => int.parse(s)).toList()..sort();
+          
+          final keepId = ids.first; // Keep the lowest ID
+          final deleteIds = ids.sublist(1); // Delete the rest
+          
+          print('   🔄 Category "$title": keeping id=$keepId, deleting ${deleteIds.join(", ")}');
+          
+          // Update all books that reference the duplicate categories
+          for (final deleteId in deleteIds) {
+            await txn.rawUpdate('''
+              UPDATE book SET categoryId = ? WHERE categoryId = ?
+            ''', [keepId, deleteId]);
+            
+            // Update child categories that reference this as parent
+            await txn.rawUpdate('''
+              UPDATE category SET parentId = ? WHERE parentId = ?
+            ''', [keepId, deleteId]);
+          }
+          
+          // Delete the duplicate categories
+          await txn.rawDelete('''
+            DELETE FROM category WHERE id IN (${deleteIds.map((_) => '?').join(',')})
+          ''', deleteIds);
+          
+          print('   ✅ Cleaned up "${title}"');
+        });
+      }
+      
+      print('✅ Duplicate categories cleaned up successfully');
+    } catch (e) {
+      print('⚠️ Error cleaning up duplicates: $e');
+      // Don't throw - this is a cleanup operation, not critical
+    }
   }
 
   /// Sanitize book title to prevent SQL injection and invalid characters
@@ -511,6 +755,21 @@ class DatabaseImportService {
         ),
       );
       print('✅ Main database opened successfully (single instance mode)');
+      
+      // Check if database is locked by trying an immediate transaction
+      try {
+        await mainDb.execute('BEGIN IMMEDIATE');
+        await mainDb.execute('ROLLBACK');
+        print('✅ Database lock check passed');
+      } catch (e) {
+        await mainDb.close();
+        throw Exception('מאגר הנתונים נעול על ידי תהליך אחר.\n\nסגור את האפליקציה ונסה שוב.\n\nשגיאה: $e');
+      }
+      
+      // Enable performance optimizations for merge
+      await mainDb.execute('PRAGMA synchronous = NORMAL');
+      await mainDb.execute('PRAGMA cache_size = -64000'); // 64MB cache
+      print('✅ Merge performance optimizations enabled');
       
       // Get actual schema from main database
       print('📋 Reading main database schema...');
@@ -611,62 +870,121 @@ class DatabaseImportService {
 
       try {
         // Get columns again for INSERT statements
-        final catColumns = await getTableColumns(mainDb, 'category');
         final bkColumns = await getTableColumns(mainDb, 'book');
         
-        // Check if category already exists by title
-        print('📂 Checking for existing category...');
-        final tempCategoryResult = await mainDb.rawQuery(
-          'SELECT title FROM temp_db.category WHERE id = 1'
-        );
-        final categoryTitle = tempCategoryResult.first['title'] as String;
-        print('   Looking for category: $categoryTitle');
+        // Build category mapping: temp_id -> main_id
+        print('🌳 Building category tree mapping...');
+        final categoryMapping = <int, int>{}; // temp_id -> main_id
         
-        final existingCategoryResult = await mainDb.rawQuery(
-          'SELECT id FROM category WHERE title = ?',
-          [categoryTitle],
-        );
-        
-        int actualCategoryId;
-        if (existingCategoryResult.isNotEmpty) {
-          actualCategoryId = existingCategoryResult.first['id'] as int;
-          print('   ✅ Category already exists with id: $actualCategoryId');
-        } else {
-          // Create new category
-          print('   Creating new category...');
-          final catCols = catColumns.join(', ');
-          final catColsWithOffset = catColumns.map((col) {
-            if (col == 'id') return 'id + $categoryOffset';
-            if (col == 'parentId') return 'CASE WHEN parentId IS NULL THEN NULL ELSE parentId + $categoryOffset END';
-            return col;
-          }).join(', ');
-          
-          await mainDb.execute('''
-            INSERT INTO category ($catCols)
-            SELECT $catColsWithOffset
-            FROM temp_db.category
-          ''');
-          actualCategoryId = 1 + categoryOffset;
-          print('   ✅ New category created with id: $actualCategoryId');
-        }
-
-        // Copy books - link to the actual category
-        print('📚 Copying books...');
-        final bookCols = bkColumns.join(', ');
-        final bookColsWithOffset = bkColumns.map((col) {
-          if (col == 'id') return 'id + $bookOffset';
-          if (col == 'categoryId') return '$actualCategoryId';  // Use actual category ID!
-          return col;
-        }).join(', ');
-        
-        print('   Using columns: $bookCols');
-        print('   Linking books to category: $actualCategoryId');
-        await mainDb.execute('''
-          INSERT INTO book ($bookCols)
-          SELECT $bookColsWithOffset
-          FROM temp_db.book
+        // Get all categories from temp DB, ordered by level (parents first)
+        final tempCategories = await mainDb.rawQuery('''
+          SELECT id, title, parentId, level
+          FROM temp_db.category
+          ORDER BY level ASC, id ASC
         ''');
-        print('✅ Books copied');
+        
+        print('📂 Processing ${tempCategories.length} categories...');
+        
+        // Load all existing categories at once for faster lookup
+        final existingCategories = await mainDb.rawQuery('''
+          SELECT id, title, parentId FROM category
+        ''');
+        
+        // Build lookup map: "title_parentId" -> id
+        // Use consistent key format: if parentId is null, use empty string
+        final existingCatMap = <String, int>{};
+        for (final cat in existingCategories) {
+          final title = cat['title'] as String;
+          final parentId = cat['parentId'] as int?;
+          final key = parentId != null ? '${title}_$parentId' : '${title}_ROOT';
+          existingCatMap[key] = cat['id'] as int;
+        }
+        print('   📋 Loaded ${existingCatMap.length} existing categories for lookup');
+        
+        // Process categories one by one to maintain proper parent-child relationships
+        // We can't use batch here because we need to update the lookup map as we go
+        for (final tempCat in tempCategories) {
+          final tempId = tempCat['id'] as int;
+          final title = tempCat['title'] as String;
+          final tempParentId = tempCat['parentId'] as int?;
+          final level = tempCat['level'] as int;
+          
+          // Find parent in main DB (if exists)
+          int? mainParentId;
+          if (tempParentId != null) {
+            mainParentId = categoryMapping[tempParentId];
+            if (mainParentId == null) {
+              print('   ⚠️ Parent mapping not found for temp_id=$tempParentId, using root');
+            }
+          }
+          
+          // Check if category already exists using the lookup map
+          // Use same key format as above
+          final lookupKey = mainParentId != null ? '${title}_$mainParentId' : '${title}_ROOT';
+          final existingId = existingCatMap[lookupKey];
+          
+          print('   🔍 Looking for "$title" with key: $lookupKey');
+          
+          if (existingId != null) {
+            categoryMapping[tempId] = existingId;
+            print('   ✅ Category "$title" exists (temp:$tempId -> main:$existingId)');
+          } else {
+            // Create new category
+            final newId = maxCategoryId + categoryOffset + tempId;
+            
+            final insertData = <String, dynamic>{
+              'id': newId,
+              'title': title,
+              'level': level,
+            };
+            if (mainParentId != null) {
+              insertData['parentId'] = mainParentId;
+            }
+            
+            await mainDb.insert('category', insertData);
+            categoryMapping[tempId] = newId;
+            
+            // IMPORTANT: Add to lookup map so child categories can find it!
+            existingCatMap[lookupKey] = newId;
+            
+            print('   ✅ Created "$title" (temp:$tempId -> main:$newId, parent:$mainParentId)');
+          }
+        }
+        
+        print('✅ Category mapping complete: ${categoryMapping.length} categories');
+
+        // Copy books with correct category mapping
+        // Note: We're already inside a transaction, so we insert directly
+        print('📚 Copying books with category mapping...');
+        final tempBooks = await mainDb.rawQuery('SELECT * FROM temp_db.book');
+        
+        int skippedBooks = 0;
+        
+        for (final book in tempBooks) {
+          final tempCategoryId = book['categoryId'] as int;
+          final mainCategoryId = categoryMapping[tempCategoryId];
+          
+          if (mainCategoryId == null) {
+            print('   ⚠️ Category mapping not found for book "${book['title']}", skipping');
+            skippedBooks++;
+            continue;
+          }
+          
+          final bookData = <String, dynamic>{};
+          for (final col in bkColumns) {
+            if (col == 'id') {
+              bookData[col] = (book['id'] as int) + bookOffset;
+            } else if (col == 'categoryId') {
+              bookData[col] = mainCategoryId;
+            } else {
+              bookData[col] = book[col];
+            }
+          }
+          
+          await mainDb.insert('book', bookData);
+        }
+        
+        print('✅ Books copied with correct categories (${tempBooks.length - skippedBooks} books, $skippedBooks skipped)');
 
         // Copy TOC texts (use INSERT OR IGNORE for UNIQUE constraint)
         print('📑 Copying TOC texts...');
@@ -733,6 +1051,15 @@ class DatabaseImportService {
         await mainDb.execute('DETACH DATABASE temp_db');
         print('✅ Temp database detached');
       }
+      
+      // Rebuild category closure table after merge
+      onProgress?.call('מעדכן עץ קטגוריות...');
+      await _rebuildCategoryClosure(mainDb);
+      
+      // Clean up any duplicate categories after merge (outside transaction)
+      onProgress?.call('מנקה כפילויות...');
+      await _cleanupDuplicateCategories(mainDb);
+      
     } catch (e) {
       print('❌ Fatal error in merge: $e');
       rethrow;
@@ -762,7 +1089,7 @@ class DatabaseImportService {
       final folder = Directory(folderPath);
       if (await folder.exists()) {
         importedFiles = await folder
-            .list()
+            .list(recursive: true)
             .where((entity) =>
                 entity is File &&
                 (entity.path.endsWith('.txt') || entity.path.endsWith('.text')))
@@ -794,10 +1121,11 @@ class DatabaseImportService {
         backupPath: backupPath,
       );
 
-      // Add category to imported categories list (using folder name)
+      // Add root category to imported categories list (using folder name)
+      // Note: This registers only the root folder, but the entire tree structure is preserved
       final folderName = path.basename(folderPath);
       await addImportedCategory(folderName);
-      print('📝 Registered category "$folderName" as user-imported');
+      print('📝 Registered root category "$folderName" as user-imported (tree structure preserved)');
 
       // Delete source text files if requested (for internal folders)
       if (deleteSourceFiles && importedFiles.isNotEmpty) {

@@ -859,18 +859,30 @@ class FileSystemData {
       for (final catData in categoriesData) {
         final catId = catData['id'] as int;
         final parentId = catData['parentId'] as int?;
+        final title = catData['title'] as String;
+        
+        // Skip if this category already exists in the library
+        if (existingCategoriesByTitle.containsKey(title)) {
+          continue; // Don't add it again!
+        }
         
         if (parentId != null && categoryMap.containsKey(parentId)) {
           // Add as subcategory to parent
           final parent = categoryMap[parentId]!;
           final child = categoryMap[catId]!;
-          child.parent = parent;
-          parent.subCategories.add(child);
+          
+          // Check if child already exists in parent
+          if (!parent.subCategories.any((c) => c.title == child.title)) {
+            child.parent = parent;
+            parent.subCategories.add(child);
+          }
         } else if (parentId == null) {
-          // Root category - add to library
+          // Root category - add to library only if not already there
           final rootCat = categoryMap[catId]!;
-          rootCat.parent = library;
-          library.subCategories.add(rootCat);
+          if (!library.subCategories.any((c) => c.title == rootCat.title)) {
+            rootCat.parent = library;
+            library.subCategories.add(rootCat);
+          }
         }
       }
       
@@ -897,6 +909,12 @@ class FileSystemData {
           }
           
           final category = categoryMap[categoryId]!;
+          
+          // Check if book already exists in category
+          if (category.books.any((b) => b.title == title)) {
+            print('  ♻️ Book "$title" already exists in "${category.title}", skipping');
+            continue;
+          }
           
           category.books.add(TextBook(
             title: title,
