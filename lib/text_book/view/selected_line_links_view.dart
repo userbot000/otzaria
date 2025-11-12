@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
-import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/tabs/models/tab.dart';
@@ -12,6 +11,7 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/settings/settings_bloc.dart';
 import 'package:otzaria/settings/settings_state.dart';
 import 'package:otzaria/utils/text_manipulation.dart' as utils;
+import 'package:otzaria/utils/html_to_textspan.dart';
 
 /// Widget שמציג את הקישורים של השורה הנבחרת בלבד
 class SelectedLineLinksView extends StatefulWidget {
@@ -368,18 +368,24 @@ class _SelectedLineLinksViewState extends State<SelectedLineLinksView> {
           }
         }
 
-        // אם יש תגי HTML (הדגשה), משתמש ב-HtmlWidget
-        if (cleanContent.contains('<font color=')) {
-          return HtmlWidget(
-            cleanContent,
-            textStyle: TextStyle(
-              fontSize: widget.fontSize * 0.75,
-              height: 1.5,
-              fontFamily: 'FrankRuhlCLM',
+        // משתמש ב-RichText עם parseHtmlToTextSpans
+        if (cleanContent.contains('<font color=') || cleanContent.contains('<')) {
+          return RichText(
+            textDirection: TextDirection.rtl,
+            text: TextSpan(
+              children: parseHtmlToTextSpans(
+                cleanContent,
+                baseStyle: TextStyle(
+                  fontSize: widget.fontSize * 0.75,
+                  height: 1.5,
+                  fontFamily: 'FrankRuhlCLM',
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
             ),
           );
         } else {
-          // אם אין הדגשה, משתמש ב-Text רגיל
+          // אם אין תגי HTML, משתמש ב-Text רגיל
           return Text(
             cleanContent,
             style: TextStyle(

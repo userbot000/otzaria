@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
@@ -8,6 +7,7 @@ import 'package:otzaria/settings/settings_bloc.dart';
 import 'package:otzaria/settings/settings_state.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/utils/text_manipulation.dart' as utils;
+import 'package:otzaria/utils/html_to_textspan.dart';
 
 class CommentaryContent extends StatefulWidget {
   const CommentaryContent({
@@ -107,11 +107,18 @@ class _CommentaryContentState extends State<CommentaryContent> {
                     displayText = utils.replaceHolyNames(displayText);
                   }
 
-                  return HtmlWidget(
-                    '<div style="text-align: justify; direction: rtl;">$displayText</div>',
-                    textStyle: TextStyle(
-                      fontSize: widget.fontSize / 1.2,
-                      fontFamily: settingsState.commentatorsFontFamily,
+                  return RichText(
+                    textAlign: TextAlign.justify,
+                    textDirection: TextDirection.rtl,
+                    text: TextSpan(
+                      children: parseHtmlToTextSpans(
+                        displayText,
+                        baseStyle: TextStyle(
+                          fontSize: widget.fontSize / 1.2,
+                          fontFamily: settingsState.commentatorsFontFamily,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
                     ),
                   );
                 },

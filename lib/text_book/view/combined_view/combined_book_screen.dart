@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:flutter_context_menu/flutter_context_menu.dart' as ctx;
 import 'package:otzaria/settings/settings_bloc.dart';
 import 'package:otzaria/settings/settings_state.dart';
@@ -23,6 +22,7 @@ import 'package:otzaria/core/scaffold_messenger.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:otzaria/utils/html_link_handler.dart';
 import 'package:otzaria/utils/text_with_inline_links.dart';
+import 'package:otzaria/utils/html_to_textspan.dart';
 
 class CombinedView extends StatefulWidget {
   CombinedView({
@@ -727,25 +727,28 @@ $textWithBreaks
                       processedData =
                           utils.formatTextWithParentheses(processedData);
 
-                      return HtmlWidget(
-                        '''
-                    <div style="text-align: justify; direction: rtl;">
-                      $processedData
-                    </div>
-                    ''',
-                        key: ValueKey('html_${widget.tab.book.title}_$index'),
-                        textStyle: TextStyle(
-                          fontSize: widget.textSize,
-                          fontFamily: settingsState.fontFamily,
-                          height: 1.5,
+                      return RichText(
+                        key: ValueKey('richtext_${widget.tab.book.title}_$index'),
+                        textAlign: TextAlign.justify,
+                        textDirection: TextDirection.rtl,
+                        text: TextSpan(
+                          children: parseHtmlToTextSpans(
+                            processedData,
+                            baseStyle: TextStyle(
+                              fontSize: widget.textSize,
+                              fontFamily: settingsState.fontFamily,
+                              height: 1.5,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                            onLinkTap: (url) async {
+                              await HtmlLinkHandler.handleLink(
+                                context,
+                                url,
+                                (tab) => widget.openBookCallback(tab),
+                              );
+                            },
+                          ),
                         ),
-                        onTapUrl: (url) async {
-                          return await HtmlLinkHandler.handleLink(
-                            context,
-                            url,
-                            (tab) => widget.openBookCallback(tab),
-                          );
-                        },
                       );
                     },
                   ),
